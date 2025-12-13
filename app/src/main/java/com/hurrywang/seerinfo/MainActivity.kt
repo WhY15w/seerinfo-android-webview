@@ -10,6 +10,7 @@ import androidx.appcompat.widget.PopupMenu
 import com.hurrywang.seerinfo.databinding.ActivityMainBinding
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AlertDialog
+import android.webkit.WebSettings
 
 class MainActivity : AppCompatActivity() {
 
@@ -24,6 +25,36 @@ class MainActivity : AppCompatActivity() {
 
         val webView = binding.webView
 
+        val appName = getString(R.string.app_name)
+        val pkgName = packageName
+        val (versionName, versionCode) = try {
+            val pi = packageManager.getPackageInfo(pkgName, 0)
+            val vc = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pi.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pi.versionCode.toLong()
+            }
+            (pi.versionName ?: "") to vc
+        } catch (_: Exception) {
+            "" to -1L
+        }
+
+        val baseUa = try {
+            WebSettings.getDefaultUserAgent(this)
+        } catch (_: Exception) {
+            webView.settings.userAgentString
+        }
+
+        val customUaSuffix = buildString {
+            // appName/versionName (packageName; vc=versionCode)
+            append(appName)
+            if (versionName.isNotBlank()) append("/").append(versionName)
+            append(" (").append(pkgName)
+            if (versionCode >= 0) append("; vc=").append(versionCode)
+            append(")")
+        }
+
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -31,6 +62,7 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
             loadWithOverviewMode = true
             loadsImagesAutomatically = true
+            userAgentString = "$baseUa $customUaSuffix"
         }
 
         fun updateFabEnabledState() {
@@ -62,12 +94,14 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     R.id.action_about -> {
-                        val pm = packageManager
-                        val pkg = packageName
-                        val versionName = try {
-                            pm.getPackageInfo(pkg, 0).versionName ?: ""
-                        } catch (_: PackageManager.NameNotFoundException) {
-                            ""
+                        val versionText = buildString {
+                            append(versionName.ifBlank { getString(R.string.about_version_unknown) })
+                            if (versionCode >= 0) append(" (").append(getString(R.string.about_version_code_prefix)).append(versionCode).append(")")
+                        }
+
+                        val extraText = buildString {
+                            append(getString(R.string.about_package_prefix)).append(pkgName)
+                            if (versionCode >= 0) append("\n").append(getString(R.string.about_version_code_prefix)).append(versionCode)
                         }
 
                         AlertDialog.Builder(this)
@@ -76,9 +110,9 @@ class MainActivity : AppCompatActivity() {
                                 getString(
                                     R.string.about_message,
                                     getString(R.string.about_author),
-                                    versionName.ifBlank { getString(R.string.about_version_unknown) },
+                                    versionText,
                                     getString(R.string.about_custom)
-                                )
+                                ) + "\n\n" + extraText
                             )
                             .setPositiveButton(android.R.string.ok, null)
                             .show()
