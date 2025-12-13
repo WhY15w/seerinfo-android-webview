@@ -8,6 +8,8 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import com.hurrywang.seerinfo.databinding.ActivityMainBinding
+import android.content.pm.PackageManager
+import androidx.appcompat.app.AlertDialog
 
 class MainActivity : AppCompatActivity() {
 
@@ -56,6 +58,30 @@ class MainActivity : AppCompatActivity() {
 
                     R.id.action_forward -> {
                         if (webView.canGoForward()) webView.goForward()
+                        true
+                    }
+
+                    R.id.action_about -> {
+                        val pm = packageManager
+                        val pkg = packageName
+                        val versionName = try {
+                            pm.getPackageInfo(pkg, 0).versionName ?: ""
+                        } catch (_: PackageManager.NameNotFoundException) {
+                            ""
+                        }
+
+                        AlertDialog.Builder(this)
+                            .setTitle(getString(R.string.about_title))
+                            .setMessage(
+                                getString(
+                                    R.string.about_message,
+                                    getString(R.string.about_author),
+                                    versionName.ifBlank { getString(R.string.about_version_unknown) },
+                                    getString(R.string.about_custom)
+                                )
+                            )
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show()
                         true
                     }
 

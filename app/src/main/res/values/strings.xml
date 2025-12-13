@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">seerinfo</string>
+
+    <string name="about_title">关于</string>
+    <string name="about_author">HurryWang</string>
+    <string name="about_custom">感谢使用 赛尔号信息聚合页</string>
+    <string name="about_version_unknown">0.0.1</string>
+    <string name="about_message">作者：%1$s\n版本：%2$s\n\n%3$s</string>
 </resources>
