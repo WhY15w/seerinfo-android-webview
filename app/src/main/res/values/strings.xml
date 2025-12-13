@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">seerinfo</string>
+    <string name="app_name">赛尔信息聚合页</string>
 
     <string name="about_title">关于</string>
     <string name="about_author">HurryWang</string>
