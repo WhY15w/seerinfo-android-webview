@@ -36,8 +36,7 @@ class MainActivity : AppCompatActivity() {
 
         val webView = binding.webView
 
-      
-        val appName = getString(R.string.app_name)
+        val appUaName = "seerinfo-android"
         val pkgName = packageName
         val (versionName, versionCode) = try {
             val pi = packageManager.getPackageInfo(pkgName, 0)
@@ -52,7 +51,6 @@ class MainActivity : AppCompatActivity() {
             "" to -1L
         }
 
-
         val baseUa = try {
             WebSettings.getDefaultUserAgent(this)
         } catch (_: Exception) {
@@ -60,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val customUaSuffix = buildString {
-            append(appName)
+            append(appUaName)
             if (versionName.isNotBlank()) append("/").append(versionName)
             append(" (").append(pkgName)
             if (versionCode >= 0) append("; vc=").append(versionCode)
