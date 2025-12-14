@@ -102,23 +102,15 @@ class MainActivity : AppCompatActivity() {
                         true
                     }
                     R.id.action_about -> {
-                        val versionText = buildString {
-                            append(versionName.ifBlank { getString(R.string.about_version_unknown) })
-                            if (versionCode >= 0) append(" (").append(getString(R.string.about_version_code_prefix)).append(versionCode).append(")")
-                        }
-                        val extraText = buildString {
-                            append(getString(R.string.about_package_prefix)).append(pkgName)
-                            if (versionCode >= 0) append("\n").append(getString(R.string.about_version_code_prefix)).append(versionCode)
-                        }
                         AlertDialog.Builder(this)
                             .setTitle(getString(R.string.about_title))
                             .setMessage(
                                 getString(
                                     R.string.about_message,
                                     getString(R.string.about_author),
-                                    versionText,
+                                    versionName.ifBlank { getString(R.string.about_version_unknown) },
                                     getString(R.string.about_custom)
-                                ) + "\n\n" + extraText
+                                )
                             )
                             .setPositiveButton(android.R.string.ok, null)
                             .show()
