@@ -1,18 +1,17 @@
 package com.hurrywang.seerinfo
 
 import android.annotation.SuppressLint
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.database.Cursor
+import android.content.ContentValues
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.SystemClock
+import android.provider.MediaStore
+import android.webkit.CookieManager
+import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -20,16 +19,21 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
+import androidx.lifecycle.lifecycleScope
 import com.hurrywang.seerinfo.databinding.ActivityMainBinding
-import android.webkit.WebSettings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLConnection
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var downloadId: Long = -1
-    private lateinit var downloadReceiver: BroadcastReceiver
 
-    // 复用 PopupMenu，避免每次点击都 inflate 导致卡顿
+    // 复用 PopupMenu，避免多次 inflate
     private var actionsMenu: PopupMenu? = null
     private var lastMenuShowUptimeMs: Long = 0L
 
@@ -42,11 +46,23 @@ class MainActivity : AppCompatActivity() {
 
         val webView = binding.webView
 
+        setupUserAgent(webView)
+        setupWebViewSettings(webView)
+        setupActionsMenu(webView)
+        setupImageLongPressSave(webView)
+        setupWebViewClient(webView)
+        setupBackPressed(webView)
+
+        webView.loadUrl("https://seerinfo.yuyuqaq.cn/")
+        updateNavItems(webView)
+    }
+
+    private fun setupUserAgent(webView: WebView) {
         val appUaName = "seerinfo-android"
         val pkgName = packageName
         val (versionName, versionCode) = try {
             val pi = packageManager.getPackageInfo(pkgName, 0)
-            val vc = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            val vc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 pi.longVersionCode
             } else {
                 @Suppress("DEPRECATION")
@@ -71,26 +87,30 @@ class MainActivity : AppCompatActivity() {
             append(")")
         }
 
+        webView.settings.userAgentString = "$baseUa $customUaSuffix"
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebViewSettings(webView: WebView) {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+
+            // 如果你并不需要 file:// 访问，建议关闭，安全性更好
             allowFileAccess = true
+
             useWideViewPort = true
             loadWithOverviewMode = true
             loadsImagesAutomatically = true
-            userAgentString = "$baseUa $customUaSuffix"
         }
 
-        // 确保 WebView 可触发长按（部分 ROM/页面可能默认不触发）
+        // 确保 WebView 可触发长按
         webView.isLongClickable = true
         webView.isHapticFeedbackEnabled = true
         webView.setOnCreateContextMenuListener { _, _, _ -> }
+    }
 
-        fun updateFabEnabledState() {
-            binding.fabActions.isEnabled = true
-        }
-
-        // 预创建并缓存菜单（第一次点击更快）
+    private fun setupActionsMenu(webView: WebView) {
         actionsMenu = PopupMenu(this, binding.fabActions).apply {
             menuInflater.inflate(R.menu.webview_actions_menu, menu)
 
@@ -112,27 +132,15 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     R.id.action_clear_cache -> {
-                        // 清除 WebView 缓存/历史
                         webView.clearCache(true)
                         webView.clearHistory()
                         webView.clearFormData()
-                        Toast.makeText(this@MainActivity, "缓存已清除", Toast.LENGTH_SHORT).show()
+                        toast("缓存已清除")
                         true
                     }
 
                     R.id.action_about -> {
-                        AlertDialog.Builder(this@MainActivity)
-                            .setTitle(getString(R.string.about_title))
-                            .setMessage(
-                                getString(
-                                    R.string.about_message,
-                                    getString(R.string.about_author),
-                                    versionName.ifBlank { getString(R.string.about_version_unknown) },
-                                    getString(R.string.about_custom)
-                                )
-                            )
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show()
+                        showAboutDialog()
                         true
                     }
 
@@ -142,19 +150,46 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.fabActions.setOnClickListener {
-            // 防抖：避免连点导致看起来“慢/卡”
             val now = SystemClock.uptimeMillis()
-            if (now - lastMenuShowUptimeMs < 250) return@setOnClickListener
+            if (now - lastMenuShowUptimeMs < 250L) return@setOnClickListener
             lastMenuShowUptimeMs = now
 
-            // 每次显示前更新可用状态
-            actionsMenu?.menu?.findItem(R.id.action_back)?.isEnabled = webView.canGoBack()
-            actionsMenu?.menu?.findItem(R.id.action_forward)?.isEnabled = webView.canGoForward()
-
+            updateNavItems(webView)
             actionsMenu?.show()
         }
+    }
 
-        // 长按图片保存
+    private fun updateNavItems(webView: WebView) {
+        actionsMenu?.menu?.findItem(R.id.action_back)?.isEnabled = webView.canGoBack()
+        actionsMenu?.menu?.findItem(R.id.action_forward)?.isEnabled = webView.canGoForward()
+
+        // 如果你希望 FAB 在不可用时禁用，可以在这里做:
+        binding.fabActions.isEnabled = true
+    }
+
+    private fun showAboutDialog() {
+        val pkgName = packageName
+        val versionName = try {
+            packageManager.getPackageInfo(pkgName, 0).versionName ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.about_title))
+            .setMessage(
+                getString(
+                    R.string.about_message,
+                    getString(R.string.about_author),
+                    versionName.ifBlank { getString(R.string.about_version_unknown) },
+                    getString(R.string.about_custom)
+                )
+            )
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun setupImageLongPressSave(webView: WebView) {
         webView.setOnLongClickListener { v ->
             val result = (v as WebView).hitTestResult
             val url = result.extra
@@ -164,63 +199,32 @@ class MainActivity : AppCompatActivity() {
 
             if (!isImage || url.isNullOrBlank()) return@setOnLongClickListener false
 
+            val ua = webView.settings.userAgentString
+            val cookie = CookieManager.getInstance().getCookie(url)
+
             AlertDialog.Builder(this)
                 .setTitle("保存图片")
                 .setMessage("是否下载并保存该图片？")
                 .setPositiveButton("保存") { _, _ ->
-                    downloadImage(url)
+                    downloadImageToGallery(url, ua, cookie)
                 }
                 .setNegativeButton("取消", null)
                 .show()
 
             true
         }
+    }
 
-        // 注册下载广播接收器
-        downloadReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) ?: -1L
-                if (id != downloadId || id < 0) return
-
-                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                val query = DownloadManager.Query().setFilterById(id)
-                val c: Cursor? = try {
-                    dm.query(query)
-                } catch (_: Exception) {
-                    null
-                }
-
-                c.use {
-                    if (it == null || !it.moveToFirst()) {
-                        Toast.makeText(context, "下载状态未知", Toast.LENGTH_SHORT).show()
-                        return
-                    }
-                    val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                        Toast.makeText(context, "图片下载完成（下载目录）", Toast.LENGTH_SHORT).show()
-                    } else {
-                        val reason = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                        Toast.makeText(context, "下载失败，原因码：$reason", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(downloadReceiver, filter)
-        }
-
+    private fun setupWebViewClient(webView: WebView) {
         webView.webViewClient = object : WebViewClient() {
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
-                updateFabEnabledState()
+                updateNavItems(webView)
             }
         }
+    }
 
-        webView.loadUrl("https://seerinfo.yuyuqaq.cn/")
-
+    private fun setupBackPressed(webView: WebView) {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (webView.canGoBack()) {
@@ -231,42 +235,122 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
-
-        updateFabEnabledState()
     }
 
-    // 下载方法
-    private fun downloadImage(url: String) {
-        try {
-            val request = DownloadManager.Request(Uri.parse(url))
+    private fun downloadImageToGallery(url: String, userAgent: String, cookie: String?) {
+        // 用 lifecycleScope：Activity 销毁会自动取消，避免泄漏
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                saveImageToMediaStore(url, userAgent, cookie)
+            }
 
-            val filename = URLUtil.guessFileName(url, null, null)
-            request.setTitle(filename)
-            request.setDescription(url)
-
-            // 让系统展示下载通知，用户也能看到是否真的开始下载/是否失败
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            request.setAllowedOverMetered(true)
-            request.setAllowedOverRoaming(true)
-
-            // 保存到「下载」目录（比 Pictures 更符合下载行为，也更容易被用户找到）
-            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
-
-            val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            downloadId = downloadManager.enqueue(request)
-
-            Toast.makeText(this, "开始下载…", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            result.fold(
+                onSuccess = { toast("已保存到相册/图库") },
+                onFailure = { toast("保存失败: ${it.message ?: it.javaClass.simpleName}") }
+            )
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        actionsMenu = null
+    private fun saveImageToMediaStore(
+        url: String,
+        userAgent: String,
+        cookie: String?
+    ): Result<Unit> {
+        var uri: Uri? = null
+        return runCatching {
+            var filename = URLUtil.guessFileName(url, null, null)
 
+            // 先基于 url/filename 猜 mime
+            val extFromUrl = MimeTypeMap.getFileExtensionFromUrl(url)
+            val mimeFromExt = extFromUrl
+                .takeIf { it.isNotBlank() }
+                ?.lowercase()
+                ?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+
+            var mime = mimeFromExt ?: (URLConnection.guessContentTypeFromName(filename) ?: "")
+
+            // 建立连接后再用 Content-Type 校正一次
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 20_000
+                instanceFollowRedirects = true
+                useCaches = false
+                setRequestProperty("User-Agent", userAgent)
+                if (!cookie.isNullOrBlank()) setRequestProperty("Cookie", cookie)
+            }
+
+            conn.connect()
+            val contentType = conn.contentType?.substringBefore(";")?.trim().orEmpty()
+            if (contentType.startsWith("image/", ignoreCase = true)) {
+                mime = contentType
+            }
+            if (!mime.startsWith("image/", ignoreCase = true)) {
+                throw IOException("链接不是图片类型: $contentType")
+            }
+
+            // 文件名补后缀
+            val hasExt = filename.contains('.') && filename.substringAfterLast('.', "").length in 2..5
+            if (!hasExt) {
+                val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"
+                filename = "$filename.$ext"
+            }
+
+            val resolver = contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                put(MediaStore.Images.Media.MIME_TYPE, mime)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(
+                        MediaStore.Images.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_PICTURES + "/Seerinfo"
+                    )
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+
+            uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IOException("无法创建媒体文件")
+
+            conn.inputStream.use { input ->
+                resolver.openOutputStream(uri!!)?.use { output ->
+                    input.copyTo(output)
+                } ?: throw IOException("无法写入媒体文件")
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                resolver.update(uri!!, done, null, null)
+            }
+
+            Unit
+        }.recoverCatching { e ->
+            // 失败时删除空记录，避免 0B
+            try {
+                uri?.let { contentResolver.delete(it, null, null) }
+            } catch (_: Exception) {
+            }
+            throw e
+        }
+    }
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onDestroy() {
+        // WebView 释放（防泄漏）
         try {
-            unregisterReceiver(downloadReceiver)
-        } catch (_: Exception) {}
+            binding.webView.apply {
+                stopLoading()
+                loadUrl("about:blank")
+                clearHistory()
+                removeAllViews()
+                destroy()
+            }
+        } catch (_: Exception) {
+        }
+
+        actionsMenu = null
+        super.onDestroy()
     }
 }
