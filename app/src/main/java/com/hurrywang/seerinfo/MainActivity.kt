@@ -6,10 +6,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.SystemClock
 import android.webkit.URLUtil
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -26,6 +28,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var downloadId: Long = -1
     private lateinit var downloadReceiver: BroadcastReceiver
+
+    // 复用 PopupMenu，避免每次点击都 inflate 导致卡顿
+    private var actionsMenu: PopupMenu? = null
+    private var lastMenuShowUptimeMs: Long = 0L
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,34 +81,47 @@ class MainActivity : AppCompatActivity() {
             userAgentString = "$baseUa $customUaSuffix"
         }
 
+        // 确保 WebView 可触发长按（部分 ROM/页面可能默认不触发）
+        webView.isLongClickable = true
+        webView.isHapticFeedbackEnabled = true
+        webView.setOnCreateContextMenuListener { _, _, _ -> }
+
         fun updateFabEnabledState() {
             binding.fabActions.isEnabled = true
         }
 
+        // 预创建并缓存菜单（第一次点击更快）
+        actionsMenu = PopupMenu(this, binding.fabActions).apply {
+            menuInflater.inflate(R.menu.webview_actions_menu, menu)
 
-        binding.fabActions.setOnClickListener { anchor ->
-            val popup = PopupMenu(this, anchor)
-            popup.menuInflater.inflate(R.menu.webview_actions_menu, popup.menu)
-
-            popup.menu.findItem(R.id.action_back)?.isEnabled = webView.canGoBack()
-            popup.menu.findItem(R.id.action_forward)?.isEnabled = webView.canGoForward()
-
-            popup.setOnMenuItemClickListener { item ->
+            setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     R.id.action_refresh -> {
                         webView.reload()
                         true
                     }
+
                     R.id.action_back -> {
                         if (webView.canGoBack()) webView.goBack()
                         true
                     }
+
                     R.id.action_forward -> {
                         if (webView.canGoForward()) webView.goForward()
                         true
                     }
+
+                    R.id.action_clear_cache -> {
+                        // 清除 WebView 缓存/历史
+                        webView.clearCache(true)
+                        webView.clearHistory()
+                        webView.clearFormData()
+                        Toast.makeText(this@MainActivity, "缓存已清除", Toast.LENGTH_SHORT).show()
+                        true
+                    }
+
                     R.id.action_about -> {
-                        AlertDialog.Builder(this)
+                        AlertDialog.Builder(this@MainActivity)
                             .setTitle(getString(R.string.about_title))
                             .setMessage(
                                 getString(
@@ -116,39 +135,73 @@ class MainActivity : AppCompatActivity() {
                             .show()
                         true
                     }
+
                     else -> false
                 }
             }
-            popup.show()
+        }
+
+        binding.fabActions.setOnClickListener {
+            // 防抖：避免连点导致看起来“慢/卡”
+            val now = SystemClock.uptimeMillis()
+            if (now - lastMenuShowUptimeMs < 250) return@setOnClickListener
+            lastMenuShowUptimeMs = now
+
+            // 每次显示前更新可用状态
+            actionsMenu?.menu?.findItem(R.id.action_back)?.isEnabled = webView.canGoBack()
+            actionsMenu?.menu?.findItem(R.id.action_forward)?.isEnabled = webView.canGoForward()
+
+            actionsMenu?.show()
         }
 
         // 长按图片保存
         webView.setOnLongClickListener { v ->
             val result = (v as WebView).hitTestResult
-            if (result.type == WebView.HitTestResult.IMAGE_TYPE ||
-                result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
-                val url = result.extra
-                if (url != null) {
-                    AlertDialog.Builder(this)
-                        .setTitle("保存图片")
-                        .setMessage("是否将图片保存到相册？")
-                        .setPositiveButton("保存") { _, _ ->
-                            downloadImage(url)
-                        }
-                        .setNegativeButton("取消", null)
-                        .show()
-                    return@setOnLongClickListener true
+            val url = result.extra
+
+            val isImage = result.type == WebView.HitTestResult.IMAGE_TYPE ||
+                result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+
+            if (!isImage || url.isNullOrBlank()) return@setOnLongClickListener false
+
+            AlertDialog.Builder(this)
+                .setTitle("保存图片")
+                .setMessage("是否下载并保存该图片？")
+                .setPositiveButton("保存") { _, _ ->
+                    downloadImage(url)
                 }
-            }
-            false
+                .setNegativeButton("取消", null)
+                .show()
+
+            true
         }
 
         // 注册下载广播接收器
         downloadReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                if (id == downloadId) {
-                    Toast.makeText(context, "图片已保存到相册", Toast.LENGTH_SHORT).show()
+                val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) ?: -1L
+                if (id != downloadId || id < 0) return
+
+                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                val query = DownloadManager.Query().setFilterById(id)
+                val c: Cursor? = try {
+                    dm.query(query)
+                } catch (_: Exception) {
+                    null
+                }
+
+                c.use {
+                    if (it == null || !it.moveToFirst()) {
+                        Toast.makeText(context, "下载状态未知", Toast.LENGTH_SHORT).show()
+                        return
+                    }
+                    val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        Toast.makeText(context, "图片下载完成（下载目录）", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val reason = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                        Toast.makeText(context, "下载失败，原因码：$reason", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -186,14 +239,23 @@ class MainActivity : AppCompatActivity() {
     private fun downloadImage(url: String) {
         try {
             val request = DownloadManager.Request(Uri.parse(url))
-            val filename = URLUtil.guessFileName(url, null, "image/jpeg")
-            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, filename)
 
-    
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            val filename = URLUtil.guessFileName(url, null, null)
+            request.setTitle(filename)
+            request.setDescription(url)
+
+            // 让系统展示下载通知，用户也能看到是否真的开始下载/是否失败
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            request.setAllowedOverMetered(true)
+            request.setAllowedOverRoaming(true)
+
+            // 保存到「下载」目录（比 Pictures 更符合下载行为，也更容易被用户找到）
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
 
             val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             downloadId = downloadManager.enqueue(request)
+
+            Toast.makeText(this, "开始下载…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
@@ -201,6 +263,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        actionsMenu = null
 
         try {
             unregisterReceiver(downloadReceiver)
