@@ -1,7 +1,9 @@
 package com.hurrywang.seerinfo
 
 import android.annotation.SuppressLint
+import android.app.DownloadManager
 import android.content.ContentValues
+import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -95,19 +97,73 @@ class MainActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-
-            // 如果你并不需要 file:// 访问，建议关闭，安全性更好
             allowFileAccess = true
 
             useWideViewPort = true
             loadWithOverviewMode = true
             loadsImagesAutomatically = true
+
+            // 让 window.open / a.click 等行为更接近浏览器
+            javaScriptCanOpenWindowsAutomatically = true
+            setSupportMultipleWindows(true)
         }
 
         // 确保 WebView 可触发长按
         webView.isLongClickable = true
         webView.isHapticFeedbackEnabled = true
         webView.setOnCreateContextMenuListener { _, _, _ -> }
+
+        // 处理网页触发的下载（如 a 标签 download / 直接下载 APK）
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            try {
+                val urlLower = (url ?: "").lowercase()
+                val cdLower = (contentDisposition ?: "").lowercase()
+
+                val isApk = urlLower.endsWith(".apk") ||
+                    cdLower.contains(".apk") ||
+                    cdLower.contains("application/vnd.android.package-archive") ||
+                    (mimeType?.equals("application/vnd.android.package-archive", ignoreCase = true) == true)
+
+                // mimeType 可能为空或被 WebView 识别为 application/octet-stream
+                val safeMime = when {
+                    isApk -> "application/vnd.android.package-archive"
+                    mimeType.isNullOrBlank() -> null
+                    mimeType.equals("application/octet-stream", ignoreCase = true) -> null
+                    else -> mimeType
+                }
+
+                var fileName = URLUtil.guessFileName(url, contentDisposition, safeMime)
+
+                // 常见问题：服务器未给正确 mime/cd 时会被猜成 .bin
+                if (isApk && !fileName.lowercase().endsWith(".apk")) {
+                    fileName = fileName.replace(Regex("\\.[A-Za-z0-9]{1,5}$"), ".Apk")
+                    if (!fileName.lowercase().endsWith(".apk")) fileName += ".Apk"
+                }
+
+                val req = DownloadManager.Request(Uri.parse(url)).apply {
+                    if (isApk) setMimeType("application/vnd.android.package-archive")
+                    else if (!safeMime.isNullOrBlank()) setMimeType(safeMime)
+
+                    setTitle(fileName)
+                    setDescription(url)
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    setAllowedOverMetered(true)
+                    setAllowedOverRoaming(true)
+
+                    val cookie = CookieManager.getInstance().getCookie(url)
+                    if (!cookie.isNullOrBlank()) addRequestHeader("Cookie", cookie)
+                    if (!userAgent.isNullOrBlank()) addRequestHeader("User-Agent", userAgent)
+
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                }
+
+                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                dm.enqueue(req)
+                toast("开始下载：$fileName")
+            } catch (e: Exception) {
+                toast("下载失败: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
     }
 
     private fun setupActionsMenu(webView: WebView) {
