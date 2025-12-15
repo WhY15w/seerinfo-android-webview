@@ -3,7 +3,6 @@ package com.hurrywang.seerinfo
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.ContentValues
-import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -30,6 +29,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLConnection
+import androidx.core.net.toUri
 
 class MainActivity : AppCompatActivity() {
 
@@ -140,7 +140,7 @@ class MainActivity : AppCompatActivity() {
                     if (!fileName.lowercase().endsWith(".apk")) fileName += ".Apk"
                 }
 
-                val req = DownloadManager.Request(Uri.parse(url)).apply {
+                val req = DownloadManager.Request(url.toUri()).apply {
                     if (isApk) setMimeType("application/vnd.android.package-archive")
                     else if (!safeMime.isNullOrBlank()) setMimeType(safeMime)
 
@@ -157,7 +157,7 @@ class MainActivity : AppCompatActivity() {
                     setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
                 }
 
-                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
                 dm.enqueue(req)
                 toast("开始下载：$fileName")
             } catch (e: Exception) {
@@ -368,14 +368,14 @@ class MainActivity : AppCompatActivity() {
                 ?: throw IOException("无法创建媒体文件")
 
             conn.inputStream.use { input ->
-                resolver.openOutputStream(uri!!)?.use { output ->
+                resolver.openOutputStream(uri)?.use { output ->
                     input.copyTo(output)
                 } ?: throw IOException("无法写入媒体文件")
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
-                resolver.update(uri!!, done, null, null)
+                resolver.update(uri, done, null, null)
             }
 
             Unit

@@ -48,8 +48,8 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
 
     // 去除未使用的 Navigation 依赖（当前项目仅 MainActivity + WebView）
-    // implementation(libs.androidx.navigation.fragment.ktx)
-    // implementation(libs.androidx.navigation.ui.ktx)
+//     implementation(libs.androidx.navigation.fragment.ktx)
+//     implementation(libs.androidx.navigation.ui.ktx)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

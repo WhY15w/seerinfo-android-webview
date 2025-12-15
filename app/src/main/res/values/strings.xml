@@ -1,9 +1,14 @@
 <resources>
     <string name="app_name">赛尔信息聚合页</string>
-
     <string name="about_title">关于</string>
     <string name="about_author">HurryWang</string>
     <string name="about_custom">感谢使用 赛尔号信息聚合页</string>
     <string name="about_version_unknown">0.0.1</string>
     <string name="about_message">作者：%1$s\n版本：%2$s\n\n%3$s</string>
+    <string name="action">更多操作</string>
+    <string name="action_refresh">刷新</string>
+    <string name="action_back">后退</string>
+    <string name="action_forward">前进</string>
+    <string name="action_clear_cache">清除缓存</string>
+    <string name="action_about">关于</string>
 </resources>

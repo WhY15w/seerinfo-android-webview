@@ -2,21 +2,21 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/action_refresh"
-        android:title="刷新" />
+        android:title="@string/action_refresh" />
 
     <item
         android:id="@+id/action_back"
-        android:title="后退" />
+        android:title="@string/action_back" />
 
     <item
         android:id="@+id/action_forward"
-        android:title="前进" />
+        android:title="@string/action_forward" />
 
     <item
         android:id="@+id/action_clear_cache"
-        android:title="清除缓存" />
+        android:title="@string/action_clear_cache" />
 
     <item
         android:id="@+id/action_about"
-        android:title="关于" />
+        android:title="@string/action_about" />
 </menu>
