@@ -16,17 +16,17 @@
         app:layout_constraintEnd_toEndOf="parent" />
 
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabActions"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="@dimen/fab_margin"
-        android:contentDescription="@string/action"
-        android:src="@android:drawable/ic_menu_more"
-        app:fabSize="mini"
-        app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Seerinfo.Fab.Circle"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        tools:ignore="VectorDrawableCompat" />
+<!--    <com.google.android.material.floatingactionbutton.FloatingActionButton-->
+<!--        android:id="@+id/fabActions"-->
+<!--        android:layout_width="wrap_content"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:layout_margin="@dimen/fab_margin"-->
+<!--        android:contentDescription="@string/action"-->
+<!--        android:src="@android:drawable/ic_menu_more"-->
+<!--        app:fabSize="mini"-->
+<!--        app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Seerinfo.Fab.Circle"-->
+<!--        app:layout_constraintBottom_toBottomOf="parent"-->
+<!--        app:layout_constraintEnd_toEndOf="parent"-->
+<!--        tools:ignore="VectorDrawableCompat" />-->
 
 </androidx.constraintlayout.widget.ConstraintLayout>

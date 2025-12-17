@@ -50,13 +50,13 @@ class MainActivity : AppCompatActivity() {
 
         setupUserAgent(webView)
         setupWebViewSettings(webView)
-        setupActionsMenu(webView)
+//        setupActionsMenu(webView)
         setupImageLongPressSave(webView)
         setupWebViewClient(webView)
         setupBackPressed(webView)
 
         webView.loadUrl("https://seerinfo.yuyuqaq.cn/")
-        updateNavItems(webView)
+//        updateNavItems(webView)
     }
 
     private fun setupUserAgent(webView: WebView) {
@@ -134,7 +134,6 @@ class MainActivity : AppCompatActivity() {
 
                 var fileName = URLUtil.guessFileName(url, contentDisposition, safeMime)
 
-                // 常见问题：服务器未给正确 mime/cd 时会被猜成 .bin
                 if (isApk && !fileName.lowercase().endsWith(".apk")) {
                     fileName = fileName.replace(Regex("\\.[A-Za-z0-9]{1,5}$"), ".Apk")
                     if (!fileName.lowercase().endsWith(".apk")) fileName += ".Apk"
@@ -166,62 +165,62 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupActionsMenu(webView: WebView) {
-        actionsMenu = PopupMenu(this, binding.fabActions).apply {
-            menuInflater.inflate(R.menu.webview_actions_menu, menu)
+//    private fun setupActionsMenu(webView: WebView) {
+//        actionsMenu = PopupMenu(this, binding.fabActions).apply {
+//            menuInflater.inflate(R.menu.webview_actions_menu, menu)
+//
+//            setOnMenuItemClickListener { item ->
+//                when (item.itemId) {
+//                    R.id.action_refresh -> {
+//                        webView.reload()
+//                        true
+//                    }
+//
+//                    R.id.action_back -> {
+//                        if (webView.canGoBack()) webView.goBack()
+//                        true
+//                    }
+//
+//                    R.id.action_forward -> {
+//                        if (webView.canGoForward()) webView.goForward()
+//                        true
+//                    }
+//
+//                    R.id.action_clear_cache -> {
+//                        webView.clearCache(true)
+//                        webView.clearHistory()
+//                        webView.clearFormData()
+//                        toast("缓存已清除")
+//                        true
+//                    }
+//
+//                    R.id.action_about -> {
+//                        showAboutDialog()
+//                        true
+//                    }
+//
+//                    else -> false
+//                }
+//            }
+//        }
+//
+//        binding.fabActions.setOnClickListener {
+//            val now = SystemClock.uptimeMillis()
+//            if (now - lastMenuShowUptimeMs < 250L) return@setOnClickListener
+//            lastMenuShowUptimeMs = now
+//
+//            updateNavItems(webView)
+//            actionsMenu?.show()
+//        }
+//    }
 
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    R.id.action_refresh -> {
-                        webView.reload()
-                        true
-                    }
-
-                    R.id.action_back -> {
-                        if (webView.canGoBack()) webView.goBack()
-                        true
-                    }
-
-                    R.id.action_forward -> {
-                        if (webView.canGoForward()) webView.goForward()
-                        true
-                    }
-
-                    R.id.action_clear_cache -> {
-                        webView.clearCache(true)
-                        webView.clearHistory()
-                        webView.clearFormData()
-                        toast("缓存已清除")
-                        true
-                    }
-
-                    R.id.action_about -> {
-                        showAboutDialog()
-                        true
-                    }
-
-                    else -> false
-                }
-            }
-        }
-
-        binding.fabActions.setOnClickListener {
-            val now = SystemClock.uptimeMillis()
-            if (now - lastMenuShowUptimeMs < 250L) return@setOnClickListener
-            lastMenuShowUptimeMs = now
-
-            updateNavItems(webView)
-            actionsMenu?.show()
-        }
-    }
-
-    private fun updateNavItems(webView: WebView) {
-        actionsMenu?.menu?.findItem(R.id.action_back)?.isEnabled = webView.canGoBack()
-        actionsMenu?.menu?.findItem(R.id.action_forward)?.isEnabled = webView.canGoForward()
-
-        // 如果你希望 FAB 在不可用时禁用，可以在这里做:
-        binding.fabActions.isEnabled = true
-    }
+//    private fun updateNavItems(webView: WebView) {
+//        actionsMenu?.menu?.findItem(R.id.action_back)?.isEnabled = webView.canGoBack()
+//        actionsMenu?.menu?.findItem(R.id.action_forward)?.isEnabled = webView.canGoForward()
+//
+//        // 如果你希望 FAB 在不可用时禁用，可以在这里做:
+//        binding.fabActions.isEnabled = true
+//    }
 
     private fun showAboutDialog() {
         val pkgName = packageName
@@ -275,7 +274,7 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
-                updateNavItems(webView)
+//                updateNavItems(webView)
             }
         }
     }
