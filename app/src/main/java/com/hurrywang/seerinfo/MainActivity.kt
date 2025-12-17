@@ -3,6 +3,7 @@ package com.hurrywang.seerinfo
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.ContentValues
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -53,6 +54,7 @@ class MainActivity : AppCompatActivity() {
 //        setupActionsMenu(webView)
         setupImageLongPressSave(webView)
         setupWebViewClient(webView)
+        setupWebChromeClient(webView) 
         setupBackPressed(webView)
 
         webView.loadUrl("https://seerinfo.yuyuqaq.cn/")
@@ -278,6 +280,42 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun setupWebChromeClient(webView: WebView) {
+    webView.webChromeClient = object :  android.webkit.WebChromeClient() {
+        override fun onCreateWindow(
+            view: WebView?,
+            isDialog: Boolean,
+            isUserGesture: Boolean,
+            resultMsg: android.os.Message?
+        ): Boolean {
+            // 创建一个临时 WebView 来接收新窗口的请求
+            val newWebView = WebView(this@MainActivity).apply {
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        url: String?
+                    ): Boolean {
+                        // 在原 WebView 中打开 URL
+                        // url?.let { webView. loadUrl(it) }
+                        url?.let {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
+        startActivity(intent)
+    }
+                        return true
+                    }
+                }
+            }
+
+            // 将消息传递给新的 WebView
+            val transport = resultMsg?.obj as?  WebView.WebViewTransport
+            transport?.webView = newWebView
+            resultMsg?.sendToTarget()
+
+            return true
+        }
+    }
+}
 
     private fun setupBackPressed(webView: WebView) {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
