@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
+import android.util.Base64
 import android.webkit.URLUtil
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -31,6 +32,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLConnection
 import androidx.core.net.toUri
+import android.webkit.JavascriptInterface
+import android.webkit.WebStorage
 
 class MainActivity : AppCompatActivity() {
 
@@ -51,14 +54,13 @@ class MainActivity : AppCompatActivity() {
 
         setupUserAgent(webView)
         setupWebViewSettings(webView)
-//        setupActionsMenu(webView)
         setupImageLongPressSave(webView)
         setupWebViewClient(webView)
         setupWebChromeClient(webView) 
         setupBackPressed(webView)
 
         webView.loadUrl("https://seerinfo.yuyuqaq.cn/")
-//        updateNavItems(webView)
+        webView.addJavascriptInterface(WebAppInterface(), "Android")
     }
 
     private fun setupUserAgent(webView: WebView) {
@@ -109,6 +111,9 @@ class MainActivity : AppCompatActivity() {
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(true)
         }
+
+        // 注册 JavaScript Bridge，供网页调用原生功能
+        webView.addJavascriptInterface(WebAppInterface(), "Android")
 
         // 确保 WebView 可触发长按
         webView.isLongClickable = true
@@ -166,63 +171,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
-//    private fun setupActionsMenu(webView: WebView) {
-//        actionsMenu = PopupMenu(this, binding.fabActions).apply {
-//            menuInflater.inflate(R.menu.webview_actions_menu, menu)
-//
-//            setOnMenuItemClickListener { item ->
-//                when (item.itemId) {
-//                    R.id.action_refresh -> {
-//                        webView.reload()
-//                        true
-//                    }
-//
-//                    R.id.action_back -> {
-//                        if (webView.canGoBack()) webView.goBack()
-//                        true
-//                    }
-//
-//                    R.id.action_forward -> {
-//                        if (webView.canGoForward()) webView.goForward()
-//                        true
-//                    }
-//
-//                    R.id.action_clear_cache -> {
-//                        webView.clearCache(true)
-//                        webView.clearHistory()
-//                        webView.clearFormData()
-//                        toast("缓存已清除")
-//                        true
-//                    }
-//
-//                    R.id.action_about -> {
-//                        showAboutDialog()
-//                        true
-//                    }
-//
-//                    else -> false
-//                }
-//            }
-//        }
-//
-//        binding.fabActions.setOnClickListener {
-//            val now = SystemClock.uptimeMillis()
-//            if (now - lastMenuShowUptimeMs < 250L) return@setOnClickListener
-//            lastMenuShowUptimeMs = now
-//
-//            updateNavItems(webView)
-//            actionsMenu?.show()
-//        }
-//    }
-
-//    private fun updateNavItems(webView: WebView) {
-//        actionsMenu?.menu?.findItem(R.id.action_back)?.isEnabled = webView.canGoBack()
-//        actionsMenu?.menu?.findItem(R.id.action_forward)?.isEnabled = webView.canGoForward()
-//
-//        // 如果你希望 FAB 在不可用时禁用，可以在这里做:
-//        binding.fabActions.isEnabled = true
-//    }
 
     private fun showAboutDialog() {
         val pkgName = packageName
@@ -351,6 +299,11 @@ class MainActivity : AppCompatActivity() {
     ): Result<Unit> {
         var uri: Uri? = null
         return runCatching {
+            // 检查是否为 data: URL (base64 编码的图片)
+            if (url.startsWith("data:", ignoreCase = true)) {
+                return@runCatching saveBase64ImageToMediaStore(url)
+            }
+
             var filename = URLUtil.guessFileName(url, null, null)
 
             // 先基于 url/filename 猜 mime
@@ -426,8 +379,159 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 保存 base64 编码的图片到相册
+     * 支持格式: data:image/png;base64,xxxxx 或 data:image/jpeg;base64,xxxxx
+     */
+    private fun saveBase64ImageToMediaStore(dataUrl: String): Unit {
+        var uri: Uri? = null
+        try {
+            // 解析 data URL: data:[<mediatype>][;base64],<data>
+            val dataPrefix = "data:"
+            if (!dataUrl.startsWith(dataPrefix, ignoreCase = true)) {
+                throw IOException("无效的 data URL")
+            }
+
+            val commaIndex = dataUrl.indexOf(',')
+            if (commaIndex < 0) {
+                throw IOException("无效的 data URL 格式")
+            }
+
+            val metadata = dataUrl.substring(dataPrefix.length, commaIndex)
+            val base64Data = dataUrl.substring(commaIndex + 1)
+
+            // 解析 MIME 类型
+            val isBase64 = metadata.contains("base64", ignoreCase = true)
+            val mime = metadata.replace(";base64", "", ignoreCase = true)
+                .takeIf { it.isNotBlank() } ?: "image/png"
+
+            if (!mime.startsWith("image/", ignoreCase = true)) {
+                throw IOException("不是图片类型: $mime")
+            }
+
+            // 解码 base64 数据
+            val imageBytes = if (isBase64) {
+                Base64.decode(base64Data, Base64.DEFAULT)
+            } else {
+                // 如果不是 base64 编码，尝试 URL 解码
+                java.net.URLDecoder.decode(base64Data, "UTF-8").toByteArray()
+            }
+
+            // 生成文件名
+            val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "png"
+            val filename = "IMG_${System.currentTimeMillis()}.$ext"
+
+            val resolver = contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                put(MediaStore.Images.Media.MIME_TYPE, mime)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(
+                        MediaStore.Images.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_PICTURES + "/Seerinfo"
+                    )
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+
+            uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IOException("无法创建媒体文件")
+
+            resolver.openOutputStream(uri)?.use { output ->
+                output.write(imageBytes)
+            } ?: throw IOException("无法写入媒体文件")
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                resolver.update(uri, done, null, null)
+            }
+        } catch (e: Exception) {
+            // 失败时删除空记录，避免 0B
+            try {
+                uri?.let { contentResolver.delete(it, null, null) }
+            } catch (_: Exception) {
+            }
+            throw e
+        }
+    }
+
     private fun toast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * JavaScript Bridge 接口，供网页调用原生功能
+     */
+    inner class WebAppInterface {
+        /**
+         * 清除 WebView 所有缓存（包括文件缓存、数据库、Cookie 等）
+         * 前端调用: window.Android.clearAllCache()
+         */
+        @JavascriptInterface
+        fun clearAllCache() {
+            runOnUiThread {
+                try {
+                    val webView = binding.webView
+
+                    // 清除 WebView 缓存（磁盘和内存）
+                    webView.clearCache(true)
+
+                    // 清除表单数据
+                    webView.clearFormData()
+
+                    // 清除历史记录
+                    webView.clearHistory()
+
+                    // 清除 Cookie
+                    CookieManager.getInstance().apply {
+                        removeAllCookies(null)
+                        flush()
+                    }
+
+                    // 清除 WebStorage（localStorage、sessionStorage、IndexedDB）
+                    WebStorage.getInstance().deleteAllData()
+
+                    // 清除应用内部 WebView 缓存目录
+                    cacheDir?.deleteRecursively()
+                    
+                    // 清除 WebView 数据库
+                    try {
+                        getDatabasePath("webview.db")?.parentFile?.listFiles()?.forEach { 
+                            if (it.name.startsWith("webview")) it.deleteRecursively() 
+                        }
+                    } catch (_: Exception) {}
+
+                    toast("缓存已彻底清除")
+                } catch (e: Exception) {
+                    toast("清除失败: ${e.message ?: e.javaClass.simpleName}")
+                }
+            }
+        }
+
+        /**
+         * 显示 Toast 提示
+         * 前端调用: window.Android.showToast("消息内容")
+         */
+        @JavascriptInterface
+        fun showToast(message: String) {
+            runOnUiThread {
+                toast(message)
+            }
+        }
+
+        /**
+         * 获取 App 版本信息
+         * 前端调用: window.Android.getAppVersion()
+         * @return 版本号字符串
+         */
+        @JavascriptInterface
+        fun getAppVersion(): String {
+            return try {
+                packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+            } catch (_: Exception) {
+                ""
+            }
+        }
     }
 
     override fun onDestroy() {
