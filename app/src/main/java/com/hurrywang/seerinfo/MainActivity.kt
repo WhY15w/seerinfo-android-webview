@@ -39,9 +39,12 @@ class MainActivity : AppCompatActivity() {
         binding.swipeRefreshLayout.setOnRefreshListener {
             webView.reload()
         }
-        webView.viewTreeObserver.addOnScrollChangedListener {
-            binding.swipeRefreshLayout.isEnabled = webView.scrollY == 0
-        }
+        webView.setRefreshStateListener(object : RefreshAwareWebView.RefreshStateListener {
+            override fun refreshState(canRefresh: Boolean) {
+                binding.swipeRefreshLayout.isEnabled = canRefresh
+            }
+        })
+        binding.swipeRefreshLayout.isEnabled = !webView.canScrollVertically(-1)
     }
 
     private fun setupWebView(webView: WebView) {
