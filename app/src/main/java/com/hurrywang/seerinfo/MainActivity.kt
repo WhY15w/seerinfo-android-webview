@@ -24,11 +24,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 兼容 Android 15 强制开启的 Edge-to-Edge，处理系统状态栏和导航栏遮挡
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { view, insets ->
+            val systemBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            view.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         imageDownloader = ImageDownloader(this)
-        
+
         setupRefreshLayout()
         setupWebView(binding.webView)
         setupBackPressed()
@@ -52,7 +60,7 @@ class MainActivity : AppCompatActivity() {
         webView.setupSettings()
         webView.setupUserAgent(this)
         webView.setupDownloadListener(this)
-        
+
         setupImageLongPressSave(webView)
         setupWebViewClients(webView)
 
