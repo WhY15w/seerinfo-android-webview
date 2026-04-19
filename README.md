@@ -11,12 +11,12 @@
 
 ## 环境要求
 
-| 项目 | 要求 |
-|---|---|
-| 最低 Android 版本 | Android 7.0（API 24） |
-| 目标 Android 版本 | Android 16（API 36） |
-| 开发语言 | Kotlin |
-| 构建工具 | Gradle + Android Gradle Plugin |
+| 项目              | 要求                           |
+| ----------------- | ------------------------------ |
+| 最低 Android 版本 | Android 7.0（API 24）          |
+| 目标 Android 版本 | Android 16（API 36）           |
+| 开发语言          | Kotlin                         |
+| 构建工具          | Gradle + Android Gradle Plugin |
 
 ## 构建与运行
 
@@ -46,6 +46,25 @@
 
 3. 生成的 APK 位于 `app/build/outputs/apk/` 目录下。
 
+## GitHub Actions 自动打包与发布
+
+项目已内置工作流：`.github/workflows/android-release.yml`。
+
+- 当推送标签（如 `v1.26`）时，会自动：
+  - 构建 `Release APK`
+  - 创建 GitHub Release
+  - 上传 APK 到 Release 附件
+- 也支持在 GitHub Actions 页面手动触发 `workflow_dispatch`（仅构建并产出 artifact）
+
+### 触发发布
+
+```bash
+git tag v1.26
+git push origin v1.26
+```
+
+发布成功后可在仓库的 **Releases** 页面下载 APK。
+
 ## 项目结构
 
 ```
@@ -65,11 +84,11 @@ app/src/main/
 
 ## 权限说明
 
-| 权限 | 用途 |
-|---|---|
-| `INTERNET` | 加载网页内容 |
-| `WRITE_EXTERNAL_STORAGE` | 旧版 Android 写入下载文件（Android 10+ 通过 MediaStore 无需此权限） |
-| `DOWNLOAD_WITHOUT_NOTIFICATION` | 后台下载文件 |
+| 权限                            | 用途                                                                |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `INTERNET`                      | 加载网页内容                                                        |
+| `WRITE_EXTERNAL_STORAGE`        | 旧版 Android 写入下载文件（Android 10+ 通过 MediaStore 无需此权限） |
+| `DOWNLOAD_WITHOUT_NOTIFICATION` | 后台下载文件                                                        |
 
 ## 作者
 
