@@ -1,6 +1,7 @@
 package com.hurrywang.seerinfo
 
 import android.content.Context
+import android.content.Intent
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebStorage
@@ -9,6 +10,7 @@ import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class WebAppInterface(
     private val context: Context,
@@ -48,6 +50,35 @@ class WebAppInterface(
     fun showToast(message: String) {
         CoroutineScope(Dispatchers.Main).launch {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    @JavascriptInterface
+    fun share(dataJson: String) {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val json = JSONObject(dataJson)
+                val title = json.optString("title")
+                val url = json.optString("url")
+
+                if (url.isBlank()) {
+                    showToast("没有可分享的链接")
+                    return@launch
+                }
+
+                val body = listOf(title, url).filter { it.isNotBlank() }.joinToString("\n")
+
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    if (title.isNotBlank()) putExtra(Intent.EXTRA_SUBJECT, title)
+                    putExtra(Intent.EXTRA_TEXT, body)
+                }
+                val chooser = Intent.createChooser(sendIntent, title.ifBlank { "分享" })
+                    .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                context.startActivity(chooser)
+            } catch (e: Exception) {
+                showToast("分享失败: ${e.message ?: e.javaClass.simpleName}")
+            }
         }
     }
 

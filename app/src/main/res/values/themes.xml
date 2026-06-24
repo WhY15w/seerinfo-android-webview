@@ -1,11 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Base.Theme.Seerinfo" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Base.Theme.Seerinfo" parent="Theme.AppCompat.DayNight.NoActionBar">
     </style>
 
     <style name="Theme.Seerinfo" parent="Base.Theme.Seerinfo" />
-
-    <style name="ShapeAppearanceOverlay.Seerinfo.Fab.Circle" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">50%</item>
-    </style>
 </resources>

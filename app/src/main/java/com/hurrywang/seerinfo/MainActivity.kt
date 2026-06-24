@@ -9,7 +9,6 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import com.hurrywang.seerinfo.databinding.ActivityMainBinding
@@ -19,8 +18,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var imageDownloader: ImageDownloader
-
-    private var actionsMenu: PopupMenu? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -149,7 +146,6 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (_: Exception) {}
 
-        actionsMenu = null
         super.onDestroy()
     }
 }
