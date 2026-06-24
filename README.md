@@ -5,8 +5,13 @@
 ## 功能
 
 - **下拉刷新**：支持下拉手势刷新页面
-- **长按保存图片**：长按页面中的图片，弹出确认框后保存至相册（`Pictures/Seerinfo` 目录）
+- **长按保存图片**：长按页面中的图片，弹出确认框后保存至相册（`Pictures/Seerinfo` 目录），支持网络图片与 Base64 图片
 - **文件下载**：通过系统 DownloadManager 下载文件，支持 APK 等各类文件类型
+- **原生分享**：网页可调用 `Android.share(...)` 唤起系统分享面板
+- **缓存清除**：网页可调用 `Android.clearAllCache()` 清除 WebView 缓存、Cookie 与本地存储
+- **外部链接跳转**：`target=_blank` / 弹窗链接自动转交系统浏览器打开
+- **返回键导航**：物理返回键优先回退 WebView 历史记录
+- **自定义 UA**：在默认 UA 后追加 `seerinfo-android/<版本>`，便于网站识别原生客户端
 - **Edge-to-Edge 支持**：兼容 Android 15 强制开启的边到边显示，正确处理状态栏与导航栏遮挡
 
 ## 环境要求
@@ -50,8 +55,8 @@
 
 项目已内置工作流：`.github/workflows/android-release.yml`。
 
-- 当推送标签（如 `v1.26`）时，会自动：
-  - 构建 `Release APK`
+- 当推送标签（如 `v1.27`）时，会自动：
+  - 构建并签名 `Release APK`
   - 创建 GitHub Release
   - 上传 APK 到 Release 附件
 - 也支持在 GitHub Actions 页面手动触发 `workflow_dispatch`（仅构建并产出 artifact）
@@ -59,8 +64,8 @@
 ### 触发发布
 
 ```bash
-git tag v1.26
-git push origin v1.26
+git tag v1.27
+git push origin v1.27
 ```
 
 发布成功后可在仓库的 **Releases** 页面下载 APK。
@@ -77,7 +82,6 @@ app/src/main/
 │   └── ImageDownloader.kt           # 图片下载器，支持网络图片与 Base64 图片保存
 ├── res/
 │   ├── layout/                      # 布局文件
-│   ├── menu/                        # 操作菜单定义
 │   └── values/                      # 字符串、颜色、主题等资源
 └── AndroidManifest.xml              # 应用权限与组件声明
 ```
