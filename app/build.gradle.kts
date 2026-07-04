@@ -13,8 +13,8 @@ android {
         applicationId = "com.hurrywang.seerinfo"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.27"
+        versionCode = 2
+        versionName = "1.28"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

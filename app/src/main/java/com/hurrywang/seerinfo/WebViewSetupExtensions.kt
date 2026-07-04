@@ -5,12 +5,20 @@ import android.app.DownloadManager
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.URLUtil
 import android.webkit.WebSettings
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.core.net.toUri
+import java.net.HttpURLConnection
+import java.net.URL
+
+internal const val CORS_BYPASS_HOST = "newseer.61.com"
+internal const val CORS_BYPASS_PATH_PREFIX = "/Assets/StandaloneWindows64/PetAnimPackage/"
+private const val TAG = "Seerinfo/Cors"
 
 fun WebView.setupUserAgent(context: Context) {
     val appUaName = "seerinfo-android"
@@ -43,6 +51,61 @@ fun WebView.setupUserAgent(context: Context) {
     }
 
     this.settings.userAgentString = "$baseUa $customUaSuffix"
+}
+
+fun fetchWithCorsBypass(url: String, userAgent: String): WebResourceResponse? {
+    Log.d(TAG, "fetch start: $url")
+    return try {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 20_000
+            instanceFollowRedirects = true
+            useCaches = false
+            setRequestProperty("User-Agent", userAgent)
+            CookieManager.getInstance().getCookie(url)?.let {
+                setRequestProperty("Cookie", it)
+            }
+            requestMethod = "GET"
+        }
+        val contentType = conn.contentType ?: "application/octet-stream"
+        val mimeType = contentType.substringBefore(";").trim().ifBlank { "application/octet-stream" }
+        val encoding = conn.contentEncoding
+        val code = conn.responseCode
+        Log.d(TAG, "fetch ok: $url -> $code $mimeType len=${conn.contentLength} enc=$encoding")
+
+        // Keep the connection alive until WebView finishes reading the stream.
+        val stream = object : java.io.FilterInputStream(conn.inputStream) {
+            override fun close() {
+                try {
+                    super.close()
+                } finally {
+                    conn.disconnect()
+                }
+            }
+        }
+
+        val responseHeaders = buildCorsResponseHeaders(conn)
+        WebResourceResponse(mimeType, encoding, stream).apply {
+            setStatusCodeAndReasonPhrase(code, conn.responseMessage ?: "OK")
+            this.responseHeaders = responseHeaders
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "fetch failed: $url", e)
+        null
+    }
+}
+
+private fun buildCorsResponseHeaders(conn: HttpURLConnection): Map<String, String> {
+    val headers = mutableMapOf<String, String>()
+    conn.headerFields.forEach { (key, values) ->
+        if (key.isNullOrBlank() || values.isNullOrEmpty()) return@forEach
+        // HttpURLConnection exposes multi-value headers as a list; join with ", " to preserve them.
+        headers[key] = values.joinToString(", ")
+    }
+    headers["Access-Control-Allow-Origin"] = "*"
+    headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    headers["Access-Control-Allow-Headers"] = "*"
+    return headers
 }
 
 @SuppressLint("SetJavaScriptEnabled")

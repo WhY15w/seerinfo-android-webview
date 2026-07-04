@@ -1,12 +1,18 @@
 package com.hurrywang.seerinfo
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.webkit.CookieManager
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
@@ -18,6 +24,24 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var imageDownloader: ImageDownloader
+
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        filePathCallback?.let { callback ->
+            val uris: Array<Uri>? = if (result.resultCode == RESULT_OK) {
+                result.data?.let { data ->
+                    data.clipData?.let { clipData ->
+                        Array(clipData.itemCount) { index -> clipData.getItemAt(index).uri }
+                    } ?: data.data?.let { arrayOf(it) }
+                }
+            } else null
+            callback.onReceiveValue(uris)
+        }
+        filePathCallback = null
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,7 +118,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupWebViewClients(webView: WebView) {
+        val userAgent = webView.settings.userAgentString ?: ""
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                val url = request?.url ?: return null
+                if (request.method.equals("GET", ignoreCase = true) &&
+                    !request.isForMainFrame &&
+                    url.host?.isTargetCorsBypassHost() == true &&
+                    url.path?.startsWith(CORS_BYPASS_PATH_PREFIX) == true
+                ) {
+                    return fetchWithCorsBypass(url.toString(), userAgent)
+                }
+                return null
+            }
+
+            private fun String.isTargetCorsBypassHost(): Boolean {
+                return this == CORS_BYPASS_HOST || this.endsWith(".${CORS_BYPASS_HOST}")
+            }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 if (binding.swipeRefreshLayout.isRefreshing) {
@@ -118,6 +159,30 @@ class MainActivity : AppCompatActivity() {
                 (resultMsg?.obj as? WebView.WebViewTransport)?.webView = newWebView
                 resultMsg?.sendToTarget()
                 return true
+            }
+
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                this@MainActivity.filePathCallback?.onReceiveValue(null)
+                this@MainActivity.filePathCallback = filePathCallback
+
+                val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                }
+
+                return try {
+                    fileChooserLauncher.launch(intent)
+                    true
+                } catch (e: Exception) {
+                    this@MainActivity.filePathCallback?.onReceiveValue(null)
+                    this@MainActivity.filePathCallback = null
+                    Toast.makeText(this@MainActivity, "无法打开文件选择器", Toast.LENGTH_SHORT).show()
+                    false
+                }
             }
         }
     }
