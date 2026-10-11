@@ -8,3 +8,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Kotlin build cache (Kotlin 2.x)
+.kotlin

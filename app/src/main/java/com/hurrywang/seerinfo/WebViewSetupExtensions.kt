@@ -119,6 +119,14 @@ fun WebView.setupSettings() {
         loadsImagesAutomatically = true
         javaScriptCanOpenWindowsAutomatically = true
         setSupportMultipleWindows(true)
+        // 按 HTTP 缓存语义加载，弱网/离线时优先复用缓存，减少白屏
+        cacheMode = WebSettings.LOAD_DEFAULT
+    }
+
+    // 提高渲染进程优先级并允许其被回收前充分调度，避免 App 切后台后渲染进程被杀、
+    // 回到前台时出现白屏（Android 8+ 生效）
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
     }
 
     isLongClickable = true

@@ -2,6 +2,8 @@ package com.hurrywang.seerinfo
 
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebStorage
@@ -16,10 +18,11 @@ class WebAppInterface(
     private val context: Context,
     private val webView: WebView
 ) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     @JavascriptInterface
     fun clearAllCache() {
-        // 使用协程或主线程 Handler 确保在主线程执行 WebView 操作
-        CoroutineScope(Dispatchers.Main).launch {
+        mainHandler.post {
             try {
                 webView.clearCache(true)
                 webView.clearFormData()
@@ -31,31 +34,40 @@ class WebAppInterface(
                 }
 
                 WebStorage.getInstance().deleteAllData()
-                context.cacheDir?.deleteRecursively()
-
-                try {
-                    context.getDatabasePath("webview.db")?.parentFile?.listFiles()?.forEach {
-                        if (it.name.startsWith("webview")) it.deleteRecursively()
-                    }
-                } catch (_: Exception) {}
-
-                showToast("缓存已彻底清除")
             } catch (e: Exception) {
                 showToast("清除失败: ${e.message ?: e.javaClass.simpleName}")
+                return@post
+            }
+
+            // 递归删除缓存目录耗时明显，放到 IO 线程避免卡住主线程
+            CoroutineScope(Dispatchers.IO).launch {
+                val result = runCatching {
+                    context.cacheDir.deleteRecursively()
+
+                    try {
+                        context.getDatabasePath("webview.db")?.parentFile?.listFiles()?.forEach {
+                            if (it.name.startsWith("webview")) it.deleteRecursively()
+                        }
+                    } catch (_: Exception) {}
+                }
+                mainHandler.post {
+                    if (result.isSuccess) showToast("缓存已彻底清除")
+                    else showToast("清除失败")
+                }
             }
         }
     }
 
     @JavascriptInterface
     fun showToast(message: String) {
-        CoroutineScope(Dispatchers.Main).launch {
+        mainHandler.post {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 
     @JavascriptInterface
     fun share(dataJson: String) {
-        CoroutineScope(Dispatchers.Main).launch {
+        mainHandler.post {
             try {
                 val json = JSONObject(dataJson)
                 val title = json.optString("title")
@@ -63,7 +75,7 @@ class WebAppInterface(
 
                 if (url.isBlank()) {
                     showToast("没有可分享的链接")
-                    return@launch
+                    return@post
                 }
 
                 val body = listOf(title, url).filter { it.isNotBlank() }.joinToString("\n")
